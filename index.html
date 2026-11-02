@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aylin’s Zoo Quest</title>
+<style>
+:root{--panel:#fff8e1;--ink:#3b2a12;--accent:#e8590c;--ok:#2b8a3e;--bad:#c92a2a;--chip:#ffe08a;--line:#7a4f1d;
+ box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--panel:#2d2415;--ink:#fbeecf;--chip:#5a4415;--line:#e0b25a}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;background:#9fd8f2;font-family:"Baloo 2","Trebuchet MS",system-ui,sans-serif;color:var(--ink)}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.card{background:var(--panel);border:3px solid var(--line);border-radius:18px;box-shadow:0 4px 0 var(--line)}
+#hud{position:fixed;left:8px;right:8px;top:calc(8px + env(safe-area-inset-top,0px));display:flex;gap:8px;align-items:flex-start;pointer-events:none}
+#mission{flex:1;padding:8px 12px;max-width:560px}
+#mission b{font-size:1.25rem;color:var(--accent)}
+#mission p{margin:2px 0 0;font-size:1rem;line-height:1.3}
+#side{display:flex;flex-direction:column;gap:6px;align-items:flex-end;pointer-events:auto}
+#score{padding:6px 12px;font-weight:700}
+button{font:inherit;font-weight:700;color:var(--ink);background:var(--chip);border:3px solid var(--line);border-radius:14px;padding:8px 14px;cursor:pointer;box-shadow:0 3px 0 var(--line)}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+button:active{transform:translateY(2px);box-shadow:0 1px 0 var(--line)}
+#stamps{position:fixed;left:8px;bottom:calc(8px + env(safe-area-inset-bottom,0px));display:flex;gap:4px;padding:6px 8px;pointer-events:none}
+.st{width:30px;height:30px;border-radius:50%;border:2px dashed var(--line);display:grid;place-items:center;font-size:.95rem}
+.st.on{background:var(--ok);border:2px solid var(--ok);color:#fff}
+#toast{position:fixed;left:50%;top:38%;transform:translateX(-50%);padding:10px 16px;opacity:0;transition:opacity .25s;pointer-events:none;text-align:center;max-width:90vw}
+#joy{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));width:120px;height:120px;border-radius:50%;background:rgba(255,248,225,.45);border:3px solid var(--line);touch-action:none}
+#knob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:var(--chip);border:3px solid var(--line)}
+#modal{position:fixed;inset:0;display:none;place-items:center;background:rgba(30,20,5,.45);padding:12px}
+#box{width:min(560px,100%);max-height:92%;overflow:auto;padding:18px}
+#box h2{margin:0 0 6px;font-size:1.5rem}
+#box p{font-size:1.1rem;line-height:1.4;margin:6px 0}
+.opts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.opts button{font-size:1.2rem;flex:1;min-width:90px}
+.blank{display:inline-block;min-width:70px;border-bottom:3px solid var(--accent);text-align:center;color:var(--accent)}
+.cards{display:grid;gap:8px;margin-top:8px}
+.cards button{text-align:left;font-weight:600;font-size:1rem}
+.cards button[disabled]{opacity:.45}
+.shake{animation:sh .3s}
+@keyframes sh{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.ok{color:var(--ok);font-weight:700}.bad{color:var(--bad);font-weight:700}
+.small{font-size:.9rem!important;opacity:.85}
+@media (prefers-reduced-motion:reduce){.shake{animation:none}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+ <div id="mission" class="card"></div>
+ <div id="side"><div id="score" class="card">⭐ 0</div><button id="hint">Show me where</button></div>
+</div>
+<div id="stamps" class="card"></div>
+<div id="toast" class="card"></div>
+<div id="joy"><div id="knob"></div></div>
+<div id="modal"><div id="box" class="card"></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const S=[
+{n:"Ticket Gate",c:"First",clue:"Find the place where people buy tickets to enter the zoo.",t:"They bought tickets at the ticket gate.",q:"They ___ tickets.",o:["bought","buyed","buy"],a:0,p:[-26,8]},
+{n:"Giraffe Area",c:"Second",clue:"Find the tallest animal with a long neck.",t:"They went to the Giraffe Area. Aylin fed a giraffe.",q:"Aylin ___ a giraffe.",o:["feeded","fed","feed"],a:1,p:[-14,-22]},
+{n:"Rabbit Corner",c:"Then",clue:"Find the corner with soft white animals.",t:"They walked to Rabbit Corner. Malik petted a soft white rabbit.",q:"Malik ___ a soft white rabbit.",o:["petted","pets","pat"],a:0,p:[10,-26]},
+{n:"Monkey Trees",c:"Next",clue:"Find the trees where animals jump and make funny noises.",t:"They went to the Monkey Trees. Aylin took a photo of a funny monkey.",q:"Aylin ___ a photo of a monkey.",o:["taked","take","took"],a:2,p:[26,-6]},
+{n:"Picnic Area",c:"After that",clue:"Find the place to eat fried rice and drink orange juice.",t:"They had lunch at the picnic area. They ate fried rice.",q:"They ___ fried rice.",o:["eated","ate","eat"],a:1,p:[20,20]},
+{n:"Gift Shop",c:"Finally",clue:"Find the shop where you can buy a small toy.",t:"They visited the gift shop. Aylin bought a small teddy bear.",q:"Aylin ___ a small teddy bear.",o:["buyed","buy","bought"],a:2,p:[-8,26]}
+];
+const $=id=>document.getElementById(id);
+const low=s=>s.charAt(0).toLowerCase()+s.slice(1);
+let phase="intro",cur=0,score=0,mistakes=0,hintOn=false,cool=0,done=[];
+
+// ---------- 3D scene ----------
+const R=new THREE.WebGLRenderer({canvas:$("c"),antialias:true});
+R.setPixelRatio(Math.min(devicePixelRatio,2));
+const sc=new THREE.Scene();sc.background=new THREE.Color(0x9fd8f2);sc.fog=new THREE.Fog(0x9fd8f2,45,110);
+const cam=new THREE.PerspectiveCamera(55,1,.1,200);
+sc.add(new THREE.HemisphereLight(0xffffff,0x7bbf6a,.95));
+const sun=new THREE.DirectionalLight(0xfff2cc,.8);sun.position.set(20,40,10);sc.add(sun);
+function M(c){return new THREE.MeshLambertMaterial({color:c})}
+function bx(w,h,d,c,x,y,z,par){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),M(c));m.position.set(x,y,z);(par||sc).add(m);return m}
+function sp(r,c,x,y,z,par){const m=new THREE.Mesh(new THREE.SphereGeometry(r,16,12),M(c));m.position.set(x,y,z);(par||sc).add(m);return m}
+function label(txt,par,y){const cv=document.createElement("canvas");cv.width=512;cv.height=128;const g=cv.getContext("2d");
+ g.fillStyle="#7a4f1d";g.fillRect(0,0,512,128);g.fillStyle="#ffe9a8";g.fillRect(8,8,496,112);g.fillStyle="#3b2a12";g.font="bold 64px sans-serif";g.textAlign="center";g.textBaseline="middle";g.fillText(txt,256,68);
+ const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv)}));s.scale.set(7,1.75,1);s.position.y=y;par.add(s)}
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(200,200),M(0x8fd16b));ground.rotation.x=-Math.PI/2;sc.add(ground);
+// paths
+S.forEach(s=>{const len=Math.hypot(s.p[0],s.p[1]);const m=bx(2.4,.05,len,0xe9d7a5,s.p[0]/2,.03,s.p[1]/2);m.rotation.y=Math.atan2(s.p[0],s.p[1])});
+// trees
+let seed=7;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
+for(let i=0;i<70;i++){const x=(rnd()-.5)*84,z=(rnd()-.5)*84;
+ if(Math.hypot(x,z)<7||S.some(s=>Math.hypot(x-s.p[0],z-s.p[1])<9))continue;
+ const t=new THREE.Group();t.position.set(x,0,z);sc.add(t);
+ bx(.7,2.4,.7,0x8a5a2b,0,1.2,0,t);const c=new THREE.Mesh(new THREE.ConeGeometry(2.2,4.5,8),M(i%3?0x2f9e44:0x51b848));c.position.y=4.2;t.add(c)}
+// stations
+const stG=[],anim={};
+S.forEach((s,i)=>{const g=new THREE.Group();g.position.set(s.p[0],0,s.p[1]);g.rotation.y=Math.atan2(-s.p[0],-s.p[1]);sc.add(g);stG.push(g);label(s.n,g,6.8);
+ if(i==0){bx(.7,5,.7,0x8a5a2b,-3,2.5,0,g);bx(.7,5,.7,0x8a5a2b,3,2.5,0,g);bx(7.4,1,.8,0xe8590c,0,5,0,g);bx(2.4,2.4,2.4,0xffd43b,5.5,1.2,0,g)}
+ if(i==1){const b=bx(3.4,1.8,1.5,0xffc233,0,3.6,0,g);[[-1.2,-.5],[1.2,-.5],[-1.2,.5],[1.2,.5]].forEach(q=>bx(.4,2.8,.4,0xe6a817,q[0],1.4,q[1],g));
+  const h=new THREE.Group();h.position.set(1.5,4,0);g.add(h);bx(.6,3.6,.6,0xffc233,.3,1.8,0,h);bx(1.5,.8,.8,0xffc233,.8,3.8,0,h);bx(.2,.2,.2,0x5c3b0a,.9,4.1,.4,h);anim.g=h;
+  [0,1,2,3,4,5].forEach(k=>bx(.5,.5,.1,0x7a4f1d,-1.4+k*.55,3.8+((k*7)%3)*.25,.8,g));bx(9,1.2,.3,0xb0793a,0,.6,3.5,g)}
+ if(i==2){bx(7,1.4,.3,0xb0793a,0,.7,3,g);const r=new THREE.Group();g.add(r);sp(.9,0xffffff,0,.9,0,r);sp(.55,0xffffff,0,1.6,.8,r);bx(.25,1,.15,0xffffff,-.2,2.4,.8,r);bx(.25,1,.15,0xffffff,.2,2.4,.8,r);anim.r=r;
+  const r2=r.clone();r2.position.set(-2.6,0,-.5);g.add(r2);anim.r2=r2;r.position.x=2}
+ if(i==3){bx(.9,7,.9,0x8a5a2b,-2,3.5,0,g);const c=new THREE.Mesh(new THREE.SphereGeometry(3.2,10,8),M(0x2f9e44));c.position.set(-2,7,0);g.add(c);
+  const m=new THREE.Group();m.position.set(1.5,1.5,0);g.add(m);sp(.9,0x8a4b1f,0,.9,0,m);sp(.6,0xc98a52,0,2,.1,m);sp(.25,0x8a4b1f,-.6,2.2,.1,m);sp(.25,0x8a4b1f,.6,2.2,.1,m);anim.m=m}
+ if(i==4){bx(5,.4,2.2,0xb0793a,0,1.6,0,g);bx(5,1.4,.4,0xb0793a,0,.8,-1.3,g);bx(5,1.4,.4,0xb0793a,0,.8,1.3,g);[-1.5,0,1.5].forEach(x=>{const p=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,.1,12),M(0xffffff));p.position.set(x,1.85,0);g.add(p);sp(.35,0xffd43b,x,2.05,0,g)});
+  bx(.4,.7,.4,0xff922b,2.9,2.1,.6,g)}
+ if(i==5){bx(6,4,4,0xffa8a8,0,2,0,g);bx(7,.6,5,0xc92a2a,0,4.3,0,g);bx(1.4,2.6,.2,0x8a5a2b,0,1.3,2.05,g);sp(.7,0xb0793a,-2,4.9,0,g);sp(.7,0xb0793a,2,4.9,0,g)}
+});
+// beam + player
+const beam=new THREE.Mesh(new THREE.CylinderGeometry(1.6,1.6,40,16,1,true),new THREE.MeshBasicMaterial({color:0xffe14d,transparent:true,opacity:.4}));beam.visible=false;sc.add(beam);
+const P=new THREE.Group();sc.add(P);
+bx(1.3,1.8,1,0x9c36b5,0,1.2,0,P);sp(.7,0xffd8b0,0,2.6,0,P);const hj=sp(.82,0xf4a6b8,0,2.65,-.1,P);hj.scale.set(1,1.05,1);sp(.5,0xffd8b0,0,2.55,.45,P).scale.set(1,1,.5);
+sp(.1,0x222222,-.2,2.65,.62,P);sp(.1,0x222222,.2,2.65,.62,P);
+P.position.set(0,0,0);let face=0;
+function resize(){R.setSize(innerWidth,innerHeight);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix()}
+addEventListener("resize",resize);resize();
+
+// ---------- input ----------
+const keys={};addEventListener("keydown",e=>{keys[e.key.toLowerCase()]=1});addEventListener("keyup",e=>{keys[e.key.toLowerCase()]=0});
+let jx=0,jz=0;const joy=$("joy"),kn=$("knob");
+function jm(e){const r=joy.getBoundingClientRect(),t=e.touches?e.touches[0]:e;let dx=(t.clientX-r.left-60)/50,dy=(t.clientY-r.top-60)/50;const l=Math.hypot(dx,dy);if(l>1){dx/=l;dy/=l}jx=dx;jz=dy;kn.style.transform=`translate(${dx*30}px,${dy*30}px)`;e.preventDefault()}
+function jend(){jx=jz=0;kn.style.transform=""}
+joy.addEventListener("touchstart",jm,{passive:false});joy.addEventListener("touchmove",jm,{passive:false});joy.addEventListener("touchend",jend);
+joy.addEventListener("pointerdown",e=>{if(e.pointerType=="mouse"){joy.setPointerCapture(e.pointerId);joy._d=1;jm(e)}});
+joy.addEventListener("pointermove",e=>{if(joy._d)jm(e)});joy.addEventListener("pointerup",()=>{joy._d=0;jend()});
+
+// ---------- UI ----------
+function toast(t){const e=$("toast");e.textContent=t;e.style.opacity=1;clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.opacity=0,2200)}
+function modal(h){$("box").innerHTML=h;$("modal").style.display="grid"}
+function close(){$("modal").style.display="none"}
+function stamps(){$("stamps").innerHTML=S.map((s,i)=>`<div class="st ${done[i]?"on":""}" title="${s.c}">${done[i]?"✓":i+1}</div>`).join("")}
+function mission(){const s=S[cur];$("mission").innerHTML=`<b>Mission ${cur+1} of 6: “${s.c}”</b><p>${s.clue}</p>`;hintOn=false;beam.visible=false}
+function addScore(n){score+=n;$("score").textContent="⭐ "+score}
+$("hint").onclick=()=>{if(phase!="play")return;hintOn=!hintOn;beam.visible=hintOn;toast(hintOn?"Follow the yellow light!":"Hint off")};
+
+function intro(){phase="intro";modal(`<h2>Aylin’s Zoo Quest 🦒</h2>
+<p>Help Aylin, Bunda Wulan and Malik enjoy their Sunday at the zoo!</p>
+<p>Read each clue. Walk to the right place. Then choose the correct past tense verb.</p>
+<p class="small">Bahasa Indonesia: Baca petunjuk, jalan ke tempat yang benar, lalu pilih kata kerja lampau yang tepat. Gerakkan dengan tombol panah / WASD atau joystick di layar.</p>
+<div class="opts"><button id="go">Start the adventure</button></div>`);
+ $("go").onclick=()=>{close();phase="play";mission();stamps()}}
+
+function quiz(i){phase="quiz";const s=S[i];let tries=0;
+ modal(`<h2>${s.n}</h2><p class="ok">Yes! This is the “${s.c}” place.</p>
+ <p>${s.q.replace("___",'<span class="blank">&nbsp;&nbsp;&nbsp;</span>')}</p>
+ <div class="opts">${s.o.map((o,k)=>`<button data-k="${k}">${o}</button>`).join("")}</div><p id="fb" class="small"></p>`);
+ $("box").querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>{const k=+b.dataset.k;
+  if(k==s.a){addScore(tries?5:10);done[i]=1;stamps();
+   modal(`<h2>${s.n} ✓</h2><p class="ok">Great job!</p><p><b>${s.c},</b> ${low(s.t)}</p><p class="small">Say it aloud: “${s.c}, ${low(s.t)}”</p><div class="opts"><button id="nx">${i<5?"Next mission":"Go to the zoo exit"}</button></div>`);
+   $("nx").onclick=()=>{close();if(i<5){cur=i+1;phase="play";mission()}else final()}
+  }else{tries++;mistakes++;b.disabled=true;b.classList.add("shake");$("fb").innerHTML='<span class="bad">Not that one. Which verb is the past tense?</span>'}})}
+
+function final(){phase="final";let order=[0,1,2,3,4,5].sort((a,b)=>((a*5+3)%7)-((b*5+3)%7)),n=0;
+ const draw=()=>{modal(`<h2>Retell the story 📖</h2><p>Tap the sentences in the order they happened. Next one: <b>${n<6?S[n].c:"-"}</b></p>
+ <div class="cards">${order.map(i=>`<button data-i="${i}" ${i<n?"disabled":""}>${S[i].t}</button>`).join("")}</div>`);
+ $("box").querySelectorAll("[data-i]").forEach(b=>b.onclick=()=>{const i=+b.dataset.i;
+  if(i==n){n++;addScore(5);n==6?end():draw()}else{mistakes++;b.classList.add("shake");toast("Think again: what happened "+S[n].c.toLowerCase()+"?")}})};
+ draw()}
+function end(){phase="end";const st=mistakes<=2?3:mistakes<=5?2:1;
+ modal(`<h2>${"⭐".repeat(st)} Super Zoo Sunday!</h2><p>Score: <b>${score}</b></p>
+ <p>${S.map(s=>`<b>${s.c},</b> ${low(s.t)}`).join(" ")}</p>
+ <p class="small">Challenge: retell the story to a friend without looking!</p><div class="opts"><button id="re">Play again</button></div>`);
+ $("re").onclick=()=>{close();cur=0;score=0;mistakes=0;done=[];addScore(0);P.position.set(0,0,0);intro()}}
+
+// ---------- loop ----------
+const clk=new THREE.Clock();
+function loop(){requestAnimationFrame(loop);const dt=Math.min(clk.getDelta(),.05),t=clk.elapsedTime;
+ if(phase=="play"){let x=jx+((keys.d||keys.arrowright)?1:0)-((keys.a||keys.arrowleft)?1:0),z=jz+((keys.s||keys.arrowdown)?1:0)-((keys.w||keys.arrowup)?1:0);
+  const l=Math.hypot(x,z);if(l>.05){if(l>1){x/=l;z/=l}P.position.x=Math.max(-38,Math.min(38,P.position.x+x*10*dt));P.position.z=Math.max(-38,Math.min(38,P.position.z+z*10*dt));face=Math.atan2(x,z);P.position.y=Math.abs(Math.sin(t*12))*.25}
+  cool-=dt;
+  S.forEach((s,i)=>{if(Math.hypot(P.position.x-s.p[0],P.position.z-s.p[1])<5.5){
+   if(i==cur&&!done[i])quiz(i);else if(cool<=0&&!done[i]){cool=3;toast("Not yet! Read the clue again.")}}})}
+ P.rotation.y+=(face-P.rotation.y)*.2;
+ cam.position.lerp(new THREE.Vector3(P.position.x,13,P.position.z+16),.08);cam.lookAt(P.position.x,1.5,P.position.z);
+ anim.g.rotation.z=Math.sin(t*1.5)*.12;anim.r.position.y=Math.abs(Math.sin(t*3))*.6;anim.r2.position.y=Math.abs(Math.sin(t*3+2))*.6;anim.m.position.y=1.5+Math.abs(Math.sin(t*4))*1.2;
+ if(hintOn){const p=S[cur].p;beam.position.set(p[0],20,p[1])}
+ R.render(sc,cam)}
+stamps();loop();intro();
+</script>
+</body>
+</html>
